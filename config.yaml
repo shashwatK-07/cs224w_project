@@ -1,0 +1,89 @@
+# Single source of truth for every data-processing rule in DECISIONS.md.
+# Change a rule here, not in code, so all three teammates build identical tables.
+
+seasons:
+  train: ["2021-22", "2022-23", "2023-24", "2024-25"]
+  test: ["2025-26"]
+  # Prior-season features need t-1 for every modeled season.
+  features: ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25"]
+
+paths:
+  raw: data/raw              # cached JSON, never committed
+  interim: data/interim      # parsed per-game tables
+  processed: data/processed  # stint table, nodes, splits
+  bad_data_log: data/bad_data_log.csv
+
+fetch:
+  sleep_seconds: 1.0         # pause between live API calls
+  timeout_seconds: 30
+  max_retries: 5
+  backoff_base_seconds: 2.0  # wait = base * 2**attempt
+
+# NBA Cup championship: not in the regular-season game log (ID outside 002).
+# Add its game ID per season; it is fetched separately and treated as regular season.
+# IDs verified against BoxScoreTraditionalV3 on 2026-11-11.
+extra_game_ids:
+  "2023-24": ["0062300001"]   # LAL (listed home) 123, IND 109
+  "2024-25": ["0062400001"]   # OKC (listed home) 81, MIL 97
+  "2025-26": ["0062500001"]   # NYK (listed home) 124, SAS 113
+
+# Games with no home team (Cup semifinals/final, international games).
+# home_s = 0 for these; A_s is still the team listed as home.
+# Each ID verified against LeagueGameLog by date and teams on 2026-11-11.
+# 2021-22 had no neutral-site regular-season games and no Cup.
+neutral_site_game_ids:
+  # 2022-23
+  - "0022200439"   # Mexico City, MIA @ SAS, 2022-12-17
+  - "0022200678"   # Paris, CHI @ DET, 2023-01-19
+  # 2023-24
+  - "0022301229"   # Cup East SF, IND-MIL, 2023-12-07
+  - "0022301230"   # Cup West SF, NOP-LAL, 2023-12-07
+  - "0062300001"   # Cup final, IND-LAL, 2023-12-09
+  - "0022300172"   # Mexico City, ATL-ORL, 2023-11-09
+  - "0022300527"   # Paris, BKN-CLE, 2024-01-11
+  # 2024-25
+  - "0022401229"   # Cup East SF, ATL-MIL, 2024-12-14
+  - "0022401230"   # Cup West SF, HOU-OKC, 2024-12-14
+  - "0062400001"   # Cup final, MIL-OKC, 2024-12-17
+  - "0022400147"   # Mexico City, MIA-WAS, 2024-11-02
+  - "0022400621"   # Paris 1, SAS-IND, 2025-01-23
+  - "0022400633"   # Paris 2, IND-SAS, 2025-01-25
+  # 2025-26
+  - "0022501229"   # Cup East SF, NYK-ORL, 2025-12-13
+  - "0022501230"   # Cup West SF, SAS-OKC, 2025-12-13
+  - "0062500001"   # Cup final, SAS-NYK, 2025-12-16
+  - "0022500147"   # Mexico City, DAL-DET, 2025-11-01
+  - "0022500578"   # Berlin, MEM-ORL, 2026-01-15
+  - "0022500602"   # London, ORL-MEM, 2026-01-18
+
+stints:
+  min_possessions: 0.5          # drop n_s == 0 (n_s is an average, so 0.5 is the smallest kept)
+  split_at_period_break: false  # same 10 players across a break stay one stint
+  possessions_definition: average  # n_s = (n_A + n_B) / 2
+
+possession_check:
+  tolerance: 3   # flag a team-game if |counted - (FGA - OREB + TOV + 0.44*FTA)| > 3
+
+garbage_time:
+  min_abs_margin: 20
+  period: 4
+  max_seconds_left: 300   # 5:00 or less left in the 4th
+
+splits:
+  seed: 224
+  val_frac: 0.10
+  test_frac: 0.10
+
+features:
+  low_minutes_cutoff: 250   # under this many prior-season minutes -> no_prior_stats = 1
+  per100: [PTS, FGA, FG3A, FTA, AST, TOV, OREB, DREB, STL, BLK, PF]
+  efficiency: [TS_PCT, EFG_PCT, FG3_PCT, FT_PCT]
+  role: [USG_PCT, AST_PCT, FG3A_RATE, FTA_RATE]
+  playing_time: [MIN_PG, GP]
+  bio: [HEIGHT_IN, AGE, POS_G, POS_F, POS_C]
+
+lineup_labels:
+  shooter_min_3pa_per100: 5.0
+  shooter_min_3p_pct: 0.34
+  nonshooter_max_3pa_per100: 2.0
+  ball_handler_min_ast_pct: 0.25
